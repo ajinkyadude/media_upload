@@ -37,6 +37,7 @@ export interface MediaItem {
 export interface MediaState {
   mediaList: MediaItem[];
   uploadedItems: MediaItem[];
+  deletedIds: string[];
   selectedMedia: MediaItem | null;
   loading: boolean;
   error: string | null;

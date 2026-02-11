@@ -5,6 +5,7 @@ import {MediaState, MediaItem} from '../../types';
 const initialState: MediaState = {
   mediaList: [],
   uploadedItems: [],
+  deletedIds: [],
   selectedMedia: null,
   loading: false,
   error: null,
@@ -42,11 +43,16 @@ const mediaSlice = createSlice({
       .addCase(fetchMediaList.fulfilled, (state, action) => {
         state.loading = false;
         state.refreshing = false;
-        const fetchedIds = new Set(action.payload.map(item => item.id));
-        const uniqueUploads = state.uploadedItems.filter(
-          item => !fetchedIds.has(item.id),
+        const deletedSet = new Set(state.deletedIds);
+        const fetchedItems = action.payload.filter(
+          item => !deletedSet.has(item.id),
         );
-        state.mediaList = [...uniqueUploads, ...action.payload];
+
+        const fetchedIds = new Set(fetchedItems.map(item => item.id));
+        const uniqueUploads = state.uploadedItems.filter(
+          item => !fetchedIds.has(item.id) && !deletedSet.has(item.id),
+        );
+        state.mediaList = [...uniqueUploads, ...fetchedItems];
         state.error = null;
       })
       .addCase(fetchMediaList.rejected, (state, action) => {
@@ -55,11 +61,15 @@ const mediaSlice = createSlice({
         state.error = (action.payload as string) || 'Failed to fetch media';
       })
       .addCase(deleteMedia.fulfilled, (state, action) => {
+        const deletedId = action.payload;
+        if (!state.deletedIds.includes(deletedId)) {
+          state.deletedIds.push(deletedId);
+        }
         state.mediaList = state.mediaList.filter(
-          item => item.id !== action.payload,
+          item => item.id !== deletedId,
         );
         state.uploadedItems = state.uploadedItems.filter(
-          item => item.id !== action.payload,
+          item => item.id !== deletedId,
         );
       });
   },

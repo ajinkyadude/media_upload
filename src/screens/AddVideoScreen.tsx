@@ -5,10 +5,16 @@ import {
   StyleSheet,
   Alert,
   SafeAreaView,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {pick, keepLocalCopy, type DocumentPickerResponse} from '@react-native-documents/picker';
+import {
+  launchImageLibrary,
+  ImagePickerResponse,
+  Asset,
+} from 'react-native-image-picker';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Card from '../components/common/Card';
@@ -25,47 +31,110 @@ type AddVideoNavProp = NativeStackNavigationProp<
 
 const AddVideoScreen: React.FC = () => {
   const navigation = useNavigation<AddVideoNavProp>();
-  const [selectedVideo, setSelectedVideo] =
-    useState<DocumentPickerResponse | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<Asset | null>(null);
   const [title, setTitle] = useState<string>('');
   const [error, setError] = useState<string>('');
 
-  const handleSelectVideo = useCallback(async (): Promise<void> => {
-    try {
-      const [result] = await pick({
-        type: ['video/*'],
+  const handleResponse = useCallback((response: ImagePickerResponse): void => {
+    if (response.didCancel) {
+      return;
+    }
+
+    if (response.errorCode) {
+      const errorMessages: Record<string, string> = {
+        camera_unavailable:
+          'Camera is not available on this device. Please use a physical device.',
+        permission:
+          'Media library permission was denied. Please enable it in your device settings.',
+        others: response.errorMessage || 'Failed to select video',
+      };
+      Alert.alert(
+        'Error',
+        errorMessages[response.errorCode] ||
+          response.errorMessage ||
+          'Failed to select video',
+      );
+      return;
+    }
+
+    if (response.assets && response.assets[0]) {
+      const video = response.assets[0];
+
+      const validationResult = validation.isValidVideo({
+        type: video.type || '',
+        size: video.fileSize || 0,
       });
 
-      if (result) {
-        const validationResult = validation.isValidVideo({
-          type: result.type || '',
-          size: result.size || 0,
-        });
-
-        if (!validationResult.valid) {
-          Alert.alert('Invalid Video', validationResult.error || '');
-          return;
-        }
-
-        const [localCopy] = await keepLocalCopy({
-          files: [{uri: result.uri, fileName: result.name ?? 'video.mp4'}],
-          destination: 'cachesDirectory',
-        });
-
-        setSelectedVideo({
-          ...result,
-          uri: localCopy.status === 'success' ? localCopy.localUri : result.uri,
-        });
-        setError('');
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error && err.message.includes('User cancelled')) {
+      if (!validationResult.valid) {
+        Alert.alert('Invalid Video', validationResult.error || '');
         return;
       }
-      Alert.alert('Error', 'Failed to select video');
-      console.error(err);
+
+      setSelectedVideo(video);
+      setError('');
     }
   }, []);
+
+  const requestStoragePermission = useCallback(async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+    try {
+      if (Platform.Version >= 33) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+          {
+            title: 'Video Access Permission',
+            message: 'This app needs access to your videos to select them for upload.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          return true;
+        }
+      } else {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+          {
+            title: 'Storage Permission',
+            message: 'This app needs access to your storage to select videos.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          },
+        );
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          return true;
+        }
+      }
+      Alert.alert(
+        'Permission Denied',
+        'Storage permission is required to select videos. Please enable it in your device settings.',
+      );
+      return false;
+    } catch (err) {
+      console.warn('Storage permission error:', err);
+      return false;
+    }
+  }, []);
+
+  const handleSelectVideo = useCallback(async (): Promise<void> => {
+    const hasPermission = await requestStoragePermission();
+    if (!hasPermission) {
+      return;
+    }
+
+    launchImageLibrary(
+      {
+        mediaType: 'video',
+        quality: 0.8,
+        presentationStyle: 'fullScreen',
+      },
+      handleResponse,
+    );
+  }, [requestStoragePermission, handleResponse]);
 
   const handleContinue = useCallback((): void => {
     if (!selectedVideo) {
@@ -80,10 +149,10 @@ const AddVideoScreen: React.FC = () => {
 
     navigation.navigate('Upload', {
       mediaData: {
-        uri: selectedVideo.uri,
+        uri: selectedVideo.uri || '',
         type: selectedVideo.type || 'video/mp4',
-        name: selectedVideo.name || 'video.mp4',
-        size: selectedVideo.size || 0,
+        name: selectedVideo.fileName || 'video.mp4',
+        size: selectedVideo.fileSize || 0,
         title: title.trim(),
       },
     });
@@ -112,14 +181,19 @@ const AddVideoScreen: React.FC = () => {
               <Text style={styles.videoIcon}>🎬</Text>
               <View style={styles.videoDetails}>
                 <Text style={styles.videoName} numberOfLines={2}>
-                  {selectedVideo.name}
+                  {selectedVideo.fileName || 'video.mp4'}
                 </Text>
                 <Text style={styles.videoSize}>
-                  💾 {helpers.formatFileSize(selectedVideo.size || 0)}
+                  💾 {helpers.formatFileSize(selectedVideo.fileSize || 0)}
                 </Text>
                 <Text style={styles.videoType}>
                   📹 {selectedVideo.type || 'video/mp4'}
                 </Text>
+                {selectedVideo.duration ? (
+                  <Text style={styles.videoDuration}>
+                    ⏱️ {Math.round(selectedVideo.duration)}s
+                  </Text>
+                ) : null}
               </View>
             </View>
 
@@ -217,6 +291,11 @@ const styles = StyleSheet.create({
   videoType: {
     fontSize: 14,
     color: COLORS.textSecondary,
+  },
+  videoDuration: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 4,
   },
   titleInput: {
     marginTop: 16,
