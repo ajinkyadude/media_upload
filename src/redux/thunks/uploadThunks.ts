@@ -26,7 +26,7 @@ export const uploadMedia = createAsyncThunk<
       size: uploadedData.size,
       createdAt: uploadedData.createdAt,
       title: mediaData.title || 'Untitled',
-      thumbnail: mediaData.uri,
+      thumbnail: mediaData.thumbnail || mediaData.uri,
     };
     dispatch(addMediaToList(newMediaItem));
 

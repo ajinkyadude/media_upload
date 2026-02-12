@@ -1,4 +1,4 @@
-import React, {useEffect, useCallback} from 'react';
+import React, {useEffect, useCallback, useState} from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,30 @@ import Card from '../components/common/Card';
 import {COLORS} from '../constants/colors';
 import {helpers} from '../utils/helpers';
 import {MediaItem} from '../types';
+
+const MediaThumbnail: React.FC<{item: MediaItem}> = ({item: mediaItem}) => {
+  const [failed, setFailed] = useState(false);
+  const thumbnailSource = mediaItem.thumbnail || mediaItem.url;
+
+  if (failed || !thumbnailSource) {
+    return (
+      <View style={[styles.thumbnail, styles.thumbnailFallback]}>
+        <Text style={styles.thumbnailFallbackIcon}>
+          {mediaItem.type === 'video' ? '🎬' : '🖼️'}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{uri: thumbnailSource}}
+      style={styles.thumbnail}
+      resizeMode="cover"
+      onError={() => setFailed(true)}
+    />
+  );
+};
 
 const ListScreen: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -55,11 +79,7 @@ const ListScreen: React.FC = () => {
     ({item}) => (
       <Card style={styles.mediaCard}>
         <View style={styles.mediaContent}>
-          <Image
-            source={{uri: item.thumbnail || item.url}}
-            style={styles.thumbnail}
-            resizeMode="cover"
-          />
+          <MediaThumbnail item={item} />
           <View style={styles.mediaInfo}>
             <Text style={styles.mediaTitle}>{item.title}</Text>
             <View style={styles.mediaDetails}>
@@ -122,6 +142,7 @@ const ListScreen: React.FC = () => {
         data={mediaList}
         renderItem={renderMediaItem}
         keyExtractor={keyExtractor}
+        nestedScrollEnabled={true}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl
@@ -161,6 +182,13 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 8,
     backgroundColor: COLORS.grayLight,
+  },
+  thumbnailFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  thumbnailFallbackIcon: {
+    fontSize: 32,
   },
   mediaInfo: {
     flex: 1,

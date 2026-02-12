@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   Platform,
   PermissionsAndroid,
+  Image,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -15,6 +16,7 @@ import {
   ImagePickerResponse,
   Asset,
 } from 'react-native-image-picker';
+import {createVideoThumbnail} from 'react-native-compressor';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Card from '../components/common/Card';
@@ -32,8 +34,19 @@ type AddVideoNavProp = NativeStackNavigationProp<
 const AddVideoScreen: React.FC = () => {
   const navigation = useNavigation<AddVideoNavProp>();
   const [selectedVideo, setSelectedVideo] = useState<Asset | null>(null);
+  const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
   const [title, setTitle] = useState<string>('');
   const [error, setError] = useState<string>('');
+
+  const generateThumbnail = useCallback(async (videoUri: string): Promise<void> => {
+    try {
+      const result = await createVideoThumbnail(videoUri);
+      setThumbnailUri(result.path);
+    } catch (err) {
+      console.warn('Failed to generate video thumbnail:', err);
+      setThumbnailUri(null);
+    }
+  }, []);
 
   const handleResponse = useCallback((response: ImagePickerResponse): void => {
     if (response.didCancel) {
@@ -72,8 +85,12 @@ const AddVideoScreen: React.FC = () => {
 
       setSelectedVideo(video);
       setError('');
+
+      if (video.uri) {
+        generateThumbnail(video.uri);
+      }
     }
-  }, []);
+  }, [generateThumbnail]);
 
   const requestStoragePermission = useCallback(async (): Promise<boolean> => {
     if (Platform.OS !== 'android') {
@@ -154,9 +171,10 @@ const AddVideoScreen: React.FC = () => {
         name: selectedVideo.fileName || 'video.mp4',
         size: selectedVideo.fileSize || 0,
         title: title.trim(),
+        thumbnail: thumbnailUri || undefined,
       },
     });
-  }, [selectedVideo, title, navigation]);
+  }, [selectedVideo, title, navigation, thumbnailUri]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -176,6 +194,14 @@ const AddVideoScreen: React.FC = () => {
         {selectedVideo ? (
           <Card style={styles.videoCard}>
             <Text style={styles.videoLabel}>Selected Video</Text>
+
+            {thumbnailUri ? (
+              <Image
+                source={{uri: thumbnailUri}}
+                style={styles.thumbnailPreview}
+                resizeMode="cover"
+              />
+            ) : null}
 
             <View style={styles.videoPreview}>
               <Text style={styles.videoIcon}>🎬</Text>
@@ -239,6 +265,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 24,
+    paddingBottom: 200
   },
   title: {
     fontSize: 24,
@@ -261,6 +288,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.textPrimary,
+    marginBottom: 12,
+  },
+  thumbnailPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: COLORS.grayLight,
     marginBottom: 12,
   },
   videoPreview: {

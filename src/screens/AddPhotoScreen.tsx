@@ -7,7 +7,7 @@ import {
   Alert,
   SafeAreaView,
   Platform,
-  PermissionsAndroid,
+  Linking,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -17,6 +17,7 @@ import {
   ImagePickerResponse,
   Asset,
 } from 'react-native-image-picker';
+import {check, request, PERMISSIONS, RESULTS} from 'react-native-permissions';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Card from '../components/common/Card';
@@ -76,28 +77,58 @@ const AddPhotoScreen: React.FC = () => {
   }, []);
 
   const requestCameraPermission = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS !== 'android') {
-      return true;
-    }
     try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-        {
-          title: 'Camera Permission',
-          message: 'This app needs access to your camera to take photos.',
-          buttonNeutral: 'Ask Me Later',
-          buttonNegative: 'Cancel',
-          buttonPositive: 'OK',
-        },
-      );
-      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-        return true;
+      const permission = Platform.select({
+        ios: PERMISSIONS.IOS.CAMERA,
+        android: PERMISSIONS.ANDROID.CAMERA,
+      });
+
+      if (!permission) {
+        return false;
       }
-      Alert.alert(
-        'Permission Denied',
-        'Camera permission is required to take photos. Please enable it in your device settings.',
-      );
-      return false;
+
+      // First check the current status
+      const status = await check(permission);
+
+      switch (status) {
+        case RESULTS.GRANTED:
+        case RESULTS.LIMITED:
+          return true;
+
+        case RESULTS.DENIED:
+          // Permission hasn't been requested yet or was dismissed — request it
+          const requestResult = await request(permission);
+          if (requestResult === RESULTS.GRANTED || requestResult === RESULTS.LIMITED) {
+            return true;
+          }
+          Alert.alert(
+            'Permission Denied',
+            'Camera permission is required to take photos. Please enable it in your device settings.',
+          );
+          return false;
+
+        case RESULTS.BLOCKED:
+          // Permission was permanently denied — direct user to settings
+          Alert.alert(
+            'Camera Permission Required',
+            'Camera permission was previously denied. Please enable it in your device settings to take photos.',
+            [
+              {text: 'Cancel', style: 'cancel'},
+              {text: 'Open Settings', onPress: () => Linking.openSettings()},
+            ],
+          );
+          return false;
+
+        case RESULTS.UNAVAILABLE:
+          Alert.alert(
+            'Camera Unavailable',
+            'Camera is not available on this device. Please use a physical device.',
+          );
+          return false;
+
+        default:
+          return false;
+      }
     } catch (err) {
       console.warn('Camera permission error:', err);
       return false;
@@ -228,6 +259,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 24,
+    paddingBottom: 200
   },
   title: {
     fontSize: 24,

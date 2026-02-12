@@ -50,6 +50,7 @@ export interface MediaData {
   name: string;
   size: number;
   title: string;
+  thumbnail?: string;
 }
 
 export interface UploadState {
