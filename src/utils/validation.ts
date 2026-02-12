@@ -16,17 +16,40 @@ export const validation = {
       return {valid: false, error: 'No file selected'};
     }
 
-    if (!MEDIA_CONFIG.ALLOWED_VIDEO_FORMATS.includes(file.type)) {
+    const mimeTypeValid =
+      MEDIA_CONFIG.ALLOWED_VIDEO_FORMATS.includes(file.type) ||
+      file.type.startsWith('video/');
+
+    let extensionValid = false;
+    if (!mimeTypeValid && file.name) {
+      const fileName = file.name.toLowerCase();
+      extensionValid = MEDIA_CONFIG.ALLOWED_VIDEO_EXTENSIONS.some(ext =>
+        fileName.endsWith(ext),
+      );
+    }
+
+    if (!mimeTypeValid && !extensionValid) {
       return {
         valid: false,
-        error: 'Invalid video format. Allowed: MP4, MOV, AVI',
+        error:
+          'Invalid video format. Supported: MP4, MOV, MKV, MPEG, MPG, AVI, WebM, HEVC',
+      };
+    }
+
+    const minSizeMB = MEDIA_CONFIG.MIN_VIDEO_SIZE / (1024 * 1024);
+    const maxSizeMB = MEDIA_CONFIG.MAX_VIDEO_SIZE / (1024 * 1024);
+
+    if (file.size < MEDIA_CONFIG.MIN_VIDEO_SIZE) {
+      return {
+        valid: false,
+        error: `Video must be at least ${minSizeMB}MB. Selected file is too small.`,
       };
     }
 
     if (file.size > MEDIA_CONFIG.MAX_VIDEO_SIZE) {
       return {
         valid: false,
-        error: `Video size exceeds ${MEDIA_CONFIG.MAX_VIDEO_SIZE / (1024 * 1024)}MB limit`,
+        error: `Video size exceeds ${maxSizeMB}MB limit`,
       };
     }
 

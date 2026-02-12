@@ -3,12 +3,36 @@ export const API_BASE_URL: string = __DEV__
   : 'https://api.production.com/api';
 
 export const MEDIA_CONFIG = {
-  MAX_VIDEO_SIZE: 100 * 1024 * 1024,
+  MIN_VIDEO_SIZE: 700 * 1024 * 1024,
+  MAX_VIDEO_SIZE: 900 * 1024 * 1024,
   MAX_IMAGE_SIZE: 10 * 1024 * 1024,
+  CHUNK_SIZE: 5 * 1024 * 1024,
+  MAX_RETRY_PER_CHUNK: 3,
   ALLOWED_VIDEO_FORMATS: [
     'video/mp4',
     'video/quicktime',
+    'video/x-matroska',
+    'video/matroska',
+    'video/mpeg',
+    'video/mpg',
+    'video/mp2t',
     'video/x-msvideo',
+    'video/avi',
+    'video/msvideo',
+    'video/webm',
+    'video/hevc',
+    'video/x-hevc',
+    'video/h265',
+    'video/x-ms-wmv',
+    'video/3gpp',
+    'video/3gpp2',
+    'video/mp4v-es',
+    'video/x-m4v',
+  ] as readonly string[],
+  ALLOWED_VIDEO_EXTENSIONS: [
+    '.mp4', '.mov', '.mkv', '.mpeg', '.mpg', '.avi',
+    '.webm', '.hevc', '.h265', '.wmv', '.3gp', '.3g2',
+    '.m4v', '.ts', '.mts',
   ] as readonly string[],
   ALLOWED_IMAGE_FORMATS: [
     'image/jpeg',

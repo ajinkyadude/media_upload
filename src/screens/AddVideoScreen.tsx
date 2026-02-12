@@ -16,6 +16,7 @@ import {
   ImagePickerResponse,
   Asset,
 } from 'react-native-image-picker';
+import {pick, types, isErrorWithCode, errorCodes} from '@react-native-documents/picker';
 import {createVideoThumbnail} from 'react-native-compressor';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
@@ -76,6 +77,7 @@ const AddVideoScreen: React.FC = () => {
       const validationResult = validation.isValidVideo({
         type: video.type || '',
         size: video.fileSize || 0,
+        name: video.fileName,
       });
 
       if (!validationResult.valid) {
@@ -137,7 +139,7 @@ const AddVideoScreen: React.FC = () => {
     }
   }, []);
 
-  const handleSelectVideo = useCallback(async (): Promise<void> => {
+  const handleSelectFromGallery = useCallback(async (): Promise<void> => {
     const hasPermission = await requestStoragePermission();
     if (!hasPermission) {
       return;
@@ -152,6 +154,83 @@ const AddVideoScreen: React.FC = () => {
       handleResponse,
     );
   }, [requestStoragePermission, handleResponse]);
+
+  const handleSelectFromFiles = useCallback(async (): Promise<void> => {
+    try {
+      const videoTypes = Platform.select({
+        ios: [
+          'public.movie',
+          'public.mpeg-4',
+          'com.apple.quicktime-movie',
+          'org.matroska.mkv',
+          'public.mpeg',
+          'public.avi',
+          'org.webmproject.webm',
+          'public.hevc',
+          'public.mpeg-2-video',
+          'public.mpeg-2-transport-stream',
+          'com.microsoft.windows-media-wmv',
+        ],
+        default: [
+          'video/mp4',
+          'video/quicktime',
+          'video/x-matroska',
+          'video/matroska',
+          'video/mpeg',
+          'video/x-msvideo',
+          'video/avi',
+          'video/webm',
+          'video/hevc',
+          'video/x-hevc',
+          'video/x-ms-wmv',
+          'video/3gpp',
+          'video/3gpp2',
+          'video/mp2t',
+          types.video,
+        ],
+      }) as string[];
+
+      const [result] = await pick({
+        type: videoTypes,
+        allowMultiSelection: false,
+      });
+
+      const fileType = result.type || 'video/mp4';
+      const fileSize = result.size || 0;
+      const fileName = result.name || 'video';
+
+      const validationResult = validation.isValidVideo({
+        type: fileType,
+        size: fileSize,
+        name: fileName,
+      });
+
+      if (!validationResult.valid) {
+        Alert.alert('Invalid Video', validationResult.error || '');
+        return;
+      }
+
+      const asset: Asset = {
+        uri: result.uri,
+        type: fileType,
+        fileName: fileName,
+        fileSize: fileSize,
+      };
+
+      setSelectedVideo(asset);
+      setError('');
+
+      if (result.uri) {
+        generateThumbnail(result.uri);
+      }
+    } catch (err) {
+      if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED) {
+        return;
+      }
+      console.warn('File picker error:', err);
+      Alert.alert('Error', 'Failed to select video file. Please try again.');
+    }
+  }, [generateThumbnail]);
 
   const handleContinue = useCallback((): void => {
     if (!selectedVideo) {
@@ -181,15 +260,26 @@ const AddVideoScreen: React.FC = () => {
       <KeyboardAvoidingWrapper contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Add Video</Text>
         <Text style={styles.subtitle}>
-          Select a video from your device (Max 100MB)
+          Select a video from your gallery or browse files
         </Text>
 
         <Button
-          title="🎥 Select Video"
-          onPress={handleSelectVideo}
+          title="🎥 Select from Gallery"
+          onPress={handleSelectFromGallery}
           variant="primary"
           style={styles.selectButton}
         />
+
+        <Button
+          title="📂 Browse Files"
+          onPress={handleSelectFromFiles}
+          variant="secondary"
+          style={styles.selectButton}
+        />
+
+        <Text style={styles.hintText}>
+          Gallery shows MP4 & MOV. Use "Browse Files" for MKV, AVI, WebM, MPEG, HEVC.
+        </Text>
 
         {selectedVideo ? (
           <Card style={styles.videoCard}>
@@ -245,12 +335,17 @@ const AddVideoScreen: React.FC = () => {
 
         <Card style={styles.infoCard}>
           <Text style={styles.infoTitle}>ℹ️ Video Requirements</Text>
-          <Text style={styles.infoText}>• Maximum size: 100MB</Text>
+          <Text style={styles.infoText}>• Maximum size: 200MB</Text>
           <Text style={styles.infoText}>
-            • Supported formats: MP4, MOV, AVI
+            • Supported formats: MP4, MOV, MKV, MPEG, MPG, AVI, WebM, HEVC
+          </Text>
+          <Text style={styles.infoTitle}>📋 How to Select</Text>
+          <Text style={styles.infoText}>
+            • "Select from Gallery" – picks from your Photos library (MP4, MOV)
           </Text>
           <Text style={styles.infoText}>
-            • Ensure good network connection for upload
+            • "Browse Files" – opens the file browser for all video formats
+            (MKV, AVI, WebM, MPEG, HEVC, etc.)
           </Text>
         </Card>
       </KeyboardAvoidingWrapper>
@@ -279,7 +374,15 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   selectButton: {
-    marginBottom: 24,
+    marginBottom: 12,
+  },
+  hintText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 8,
   },
   videoCard: {
     marginBottom: 16,

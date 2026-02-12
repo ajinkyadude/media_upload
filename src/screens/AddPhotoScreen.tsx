@@ -87,7 +87,6 @@ const AddPhotoScreen: React.FC = () => {
         return false;
       }
 
-      // First check the current status
       const status = await check(permission);
 
       switch (status) {
@@ -96,7 +95,6 @@ const AddPhotoScreen: React.FC = () => {
           return true;
 
         case RESULTS.DENIED:
-          // Permission hasn't been requested yet or was dismissed — request it
           const requestResult = await request(permission);
           if (requestResult === RESULTS.GRANTED || requestResult === RESULTS.LIMITED) {
             return true;
@@ -108,7 +106,6 @@ const AddPhotoScreen: React.FC = () => {
           return false;
 
         case RESULTS.BLOCKED:
-          // Permission was permanently denied — direct user to settings
           Alert.alert(
             'Camera Permission Required',
             'Camera permission was previously denied. Please enable it in your device settings to take photos.',

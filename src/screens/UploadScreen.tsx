@@ -1,13 +1,15 @@
-import React, {useEffect, useCallback} from 'react';
+import React, {useEffect, useCallback, useRef} from 'react';
 import {View, Text, StyleSheet, SafeAreaView, BackHandler} from 'react-native';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {uploadMedia} from '../redux/thunks/uploadThunks';
-import {resetUpload} from '../redux/slices/uploadSlice';
+import {resetUpload, cancelUpload as cancelUploadAction} from '../redux/slices/uploadSlice';
+import {uploadService} from '../services/uploadService';
 import {useAppDispatch, useAppSelector} from '../redux/store';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import {COLORS} from '../constants/colors';
+import {helpers} from '../utils/helpers';
 import {RootStackParamList} from '../types';
 
 type UploadNavProp = NativeStackNavigationProp<RootStackParamList, 'Upload'>;
@@ -18,17 +20,30 @@ const UploadScreen: React.FC = () => {
   const route = useRoute<UploadRouteProp>();
   const dispatch = useAppDispatch();
 
-  const {uploading, progress, error, success, uploadedMedia} = useAppSelector(
-    state => state.upload,
-  );
+  const isMountedRef = useRef<boolean>(true);
+  const uploadStartedRef = useRef<boolean>(false);
+
+  const {uploading, progress, error, success, chunkProgress, isCancelled} =
+    useAppSelector(state => state.upload);
 
   const {mediaData} = route.params || {};
 
   useEffect(() => {
-    if (mediaData) {
+    if (mediaData && !uploadStartedRef.current) {
+      uploadStartedRef.current = true;
       dispatch(uploadMedia(mediaData));
     }
   }, [dispatch, mediaData]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      uploadService.cancelUpload();
+      dispatch(resetUpload());
+    };
+  }, [dispatch]);
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
@@ -50,13 +65,26 @@ const UploadScreen: React.FC = () => {
   }, [dispatch, navigation]);
 
   const handleRetry = useCallback((): void => {
+    uploadStartedRef.current = false;
     dispatch(resetUpload());
     if (mediaData) {
+      uploadStartedRef.current = true;
       dispatch(uploadMedia(mediaData));
     }
   }, [dispatch, mediaData]);
 
   const handleCancel = useCallback((): void => {
+    uploadService.cancelUpload();
+    dispatch(cancelUploadAction());
+    setTimeout(() => {
+      if (isMountedRef.current) {
+        dispatch(resetUpload());
+        navigation.goBack();
+      }
+    }, 300);
+  }, [dispatch, navigation]);
+
+  const handleGoBack = useCallback((): void => {
     dispatch(resetUpload());
     navigation.goBack();
   }, [dispatch, navigation]);
@@ -65,7 +93,7 @@ const UploadScreen: React.FC = () => {
     if (success) {
       return '✅';
     }
-    if (error) {
+    if (error || isCancelled) {
       return '❌';
     }
     return '⏳';
@@ -74,6 +102,9 @@ const UploadScreen: React.FC = () => {
   const getStatusText = (): string => {
     if (success) {
       return 'Upload Complete!';
+    }
+    if (isCancelled) {
+      return 'Upload Cancelled';
     }
     if (error) {
       return 'Upload Failed';
@@ -95,6 +126,8 @@ const UploadScreen: React.FC = () => {
               <Text style={styles.mediaTitle}>{mediaData.title}</Text>
               <Text style={styles.mediaDetails}>
                 {mediaData.type?.includes('video') ? '🎥 Video' : '📷 Photo'}
+                {'  •  '}
+                {helpers.formatFileSize(mediaData.size)}
               </Text>
             </View>
           ) : null}
@@ -107,12 +140,33 @@ const UploadScreen: React.FC = () => {
                 />
               </View>
               <Text style={styles.progressText}>{progress}%</Text>
+
+              {chunkProgress ? (
+                <View style={styles.chunkInfo}>
+                  <Text style={styles.chunkText}>
+                    📦 Chunk {chunkProgress.uploadedChunks} of{' '}
+                    {chunkProgress.totalChunks}
+                  </Text>
+                  <Text style={styles.chunkText}>
+                    📤 {helpers.formatFileSize(chunkProgress.bytesUploaded)} /{' '}
+                    {helpers.formatFileSize(chunkProgress.totalBytes)}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
 
-          {error ? (
+          {error && !isCancelled ? (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {isCancelled ? (
+            <View style={styles.cancelledContainer}>
+              <Text style={styles.cancelledText}>
+                Upload was cancelled. No data was saved.
+              </Text>
             </View>
           ) : null}
 
@@ -128,14 +182,13 @@ const UploadScreen: React.FC = () => {
         <View style={styles.buttonContainer}>
           {uploading ? (
             <Button
-              title="Cancel"
+              title="Cancel Upload"
               onPress={handleCancel}
               variant="outline"
-              disabled={uploading}
             />
           ) : null}
 
-          {error ? (
+          {error && !isCancelled ? (
             <>
               <Button
                 title="Retry Upload"
@@ -144,11 +197,20 @@ const UploadScreen: React.FC = () => {
               />
               <Button
                 title="Go Back"
-                onPress={handleCancel}
+                onPress={handleGoBack}
                 variant="outline"
                 style={styles.button}
               />
             </>
+          ) : null}
+
+          {isCancelled ? (
+            <Button
+              title="Go Back"
+              onPress={handleGoBack}
+              variant="outline"
+              style={styles.button}
+            />
           ) : null}
 
           {success ? (
@@ -224,6 +286,18 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     textAlign: 'center',
   },
+  chunkInfo: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: `${COLORS.info}10`,
+    borderRadius: 8,
+  },
+  chunkText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
   errorContainer: {
     backgroundColor: `${COLORS.error}15`,
     padding: 16,
@@ -234,6 +308,18 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 14,
     color: COLORS.error,
+    textAlign: 'center',
+  },
+  cancelledContainer: {
+    backgroundColor: `${COLORS.warning}15`,
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+  },
+  cancelledText: {
+    fontSize: 14,
+    color: COLORS.warning,
     textAlign: 'center',
   },
   successContainer: {

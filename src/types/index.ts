@@ -53,12 +53,22 @@ export interface MediaData {
   thumbnail?: string;
 }
 
+export interface ChunkUploadProgress {
+  totalChunks: number;
+  uploadedChunks: number;
+  currentChunk: number;
+  bytesUploaded: number;
+  totalBytes: number;
+}
+
 export interface UploadState {
   uploading: boolean;
   progress: number;
   error: string | null;
   success: boolean;
   uploadedMedia: UploadedMedia | null;
+  chunkProgress: ChunkUploadProgress | null;
+  isCancelled: boolean;
 }
 
 export interface UploadedMedia {
@@ -77,6 +87,7 @@ export interface ValidationResult {
 export interface FileInfo {
   type: string;
   size: number;
+  name?: string;
 }
 
 export type RootStackParamList = {

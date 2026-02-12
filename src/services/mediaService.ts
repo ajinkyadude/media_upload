@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {uploadService, SavedMediaRecord} from './uploadService';
 import {MediaItem, ApiResponse} from '../types';
 
 interface FetchMediaParams {
@@ -30,47 +31,39 @@ const saveDeletedIds = async (ids: Set<string>): Promise<void> => {
   }
 };
 
-const mockMediaItems: MediaItem[] = [
-  {
-    id: '1',
-    type: 'image',
-    title: 'Sample Image 1',
-    url: 'https://picsum.photos/200/300',
-    thumbnail: 'https://picsum.photos/100/150',
-    size: 1024000,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    type: 'video',
-    title: 'Sample Video 1',
-    url: 'https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4',
-    thumbnail: 'https://picsum.photos/100/150',
-    size: 5120000,
-    duration: 120,
-    createdAt: new Date().toISOString(),
-  },
-];
+const recordToMediaItem = (record: SavedMediaRecord): MediaItem => ({
+  id: record.id,
+  type: record.type.includes('video') ? 'video' : 'image',
+  title: record.title,
+  url: record.uri,
+  thumbnail: record.thumbnail || record.uri,
+  size: record.size,
+  createdAt: record.createdAt,
+});
 
 export const mediaService = {
   getMediaList: async (
     _params?: FetchMediaParams,
   ): Promise<ApiResponse<MediaItem[]>> => {
     const deletedIds = await loadDeletedIds();
-    return new Promise<ApiResponse<MediaItem[]>>(resolve => {
-      setTimeout(() => {
-        const filteredItems = mockMediaItems.filter(
-          item => !deletedIds.has(item.id),
-        );
-        resolve({
-          data: filteredItems,
-        });
-      }, 1000);
-    });
+
+    const savedRecords = await uploadService.loadSavedMedia();
+    const savedItems = savedRecords
+      .map(recordToMediaItem)
+      .filter(item => !deletedIds.has(item.id));
+
+    return {
+      data: savedItems,
+    };
   },
 
   getMediaById: async (id: string): Promise<MediaItem> => {
-    throw new Error(`getMediaById not implemented for id: ${id}`);
+    const savedRecords = await uploadService.loadSavedMedia();
+    const record = savedRecords.find(r => r.id === id);
+    if (record) {
+      return recordToMediaItem(record);
+    }
+    throw new Error(`Media not found for id: ${id}`);
   },
 
   deleteMedia: async (id: string): Promise<{success: boolean}> => {
@@ -79,10 +72,8 @@ export const mediaService = {
     deletedIdsCache = deletedIds;
     await saveDeletedIds(deletedIds);
 
-    return new Promise<{success: boolean}>(resolve => {
-      setTimeout(() => {
-        resolve({success: true});
-      }, 500);
-    });
+    await uploadService.deleteSavedMedia(id);
+
+    return {success: true};
   },
 };

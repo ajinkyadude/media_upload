@@ -1,40 +1,73 @@
-import {storageService} from './storageService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {MediaData, UploadedMedia, ApiResponse} from '../types';
 
-type ProgressCallback = (progress: number) => void;
+const SAVED_MEDIA_KEY = '@saved_media_records';
+
+export interface SavedMediaRecord {
+  id: string;
+  uri: string;
+  type: string;
+  size: number;
+  title: string;
+  thumbnail?: string;
+  createdAt: string;
+}
 
 export const uploadService = {
-  uploadFile: async (
+  saveMediaLocally: async (
     mediaData: MediaData,
-    onProgress: ProgressCallback,
   ): Promise<ApiResponse<UploadedMedia>> => {
-    return new Promise<ApiResponse<UploadedMedia>>((resolve, _reject) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        onProgress(progress);
+    const id = `media_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+    const createdAt = new Date().toISOString();
 
-        if (progress >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            resolve({
-              data: {
-                id: Date.now().toString(),
-                url: mediaData.uri,
-                type: mediaData.type,
-                size: mediaData.size,
-                createdAt: new Date().toISOString(),
-              },
-            });
-          }, 500);
-        }
-      }, 300);
-    });
+    const record: SavedMediaRecord = {
+      id,
+      uri: mediaData.uri,
+      type: mediaData.type,
+      size: mediaData.size,
+      title: mediaData.title,
+      thumbnail: mediaData.thumbnail,
+      createdAt,
+    };
+
+    const existing = await AsyncStorage.getItem(SAVED_MEDIA_KEY);
+    const records: SavedMediaRecord[] = existing ? JSON.parse(existing) : [];
+
+    records.unshift(record);
+
+    await AsyncStorage.setItem(SAVED_MEDIA_KEY, JSON.stringify(records));
+
+    return {
+      data: {
+        id,
+        url: mediaData.uri,
+        type: mediaData.type,
+        size: mediaData.size,
+        createdAt,
+      },
+    };
   },
 
-  cancelUpload: (cancelToken: {cancel: (msg: string) => void} | null): void => {
-    if (cancelToken) {
-      cancelToken.cancel('Upload cancelled by user');
+  loadSavedMedia: async (): Promise<SavedMediaRecord[]> => {
+    try {
+      const existing = await AsyncStorage.getItem(SAVED_MEDIA_KEY);
+      return existing ? JSON.parse(existing) : [];
+    } catch (err) {
+      console.warn('Failed to load saved media:', err);
+      return [];
     }
   },
+
+  deleteSavedMedia: async (id: string): Promise<void> => {
+    try {
+      const existing = await AsyncStorage.getItem(SAVED_MEDIA_KEY);
+      const records: SavedMediaRecord[] = existing ? JSON.parse(existing) : [];
+      const updated = records.filter(r => r.id !== id);
+      await AsyncStorage.setItem(SAVED_MEDIA_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.warn('Failed to delete saved media:', err);
+    }
+  },
+
+  cancelUpload: (): void => {},
 };
