@@ -335,7 +335,7 @@ const AddVideoScreen: React.FC = () => {
 
         <Card style={styles.infoCard}>
           <Text style={styles.infoTitle}>ℹ️ Video Requirements</Text>
-          <Text style={styles.infoText}>• Maximum size: 200MB</Text>
+          <Text style={styles.infoText}>• Maximum size: 900MB</Text>
           <Text style={styles.infoText}>
             • Supported formats: MP4, MOV, MKV, MPEG, MPG, AVI, WebM, HEVC
           </Text>
