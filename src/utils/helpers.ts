@@ -68,6 +68,28 @@ export const helpers = {
     return filename.slice(((filename.lastIndexOf('.') - 1) >>> 0) + 2);
   },
 
+  getMimeTypeFromExtension: (filename: string): string | null => {
+    const ext = filename.toLowerCase().split('.').pop();
+    const mimeMap: Record<string, string> = {
+      mp4: 'video/mp4',
+      mov: 'video/quicktime',
+      mkv: 'video/x-matroska',
+      mpeg: 'video/mpeg',
+      mpg: 'video/mpeg',
+      avi: 'video/x-msvideo',
+      webm: 'video/webm',
+      hevc: 'video/hevc',
+      h265: 'video/hevc',
+      wmv: 'video/x-ms-wmv',
+      '3gp': 'video/3gpp',
+      '3g2': 'video/3gpp2',
+      m4v: 'video/x-m4v',
+      ts: 'video/mp2t',
+      mts: 'video/mp2t',
+    };
+    return ext ? mimeMap[ext] || null : null;
+  },
+
   generateId: (): string => {
     return Date.now().toString(36) + Math.random().toString(36).substring(2);
   },

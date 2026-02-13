@@ -18,6 +18,7 @@ import {
 } from 'react-native-image-picker';
 import {pick, types, isErrorWithCode, errorCodes} from '@react-native-documents/picker';
 import {createVideoThumbnail} from 'react-native-compressor';
+import RNFS from 'react-native-fs';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Card from '../components/common/Card';
@@ -163,6 +164,7 @@ const AddVideoScreen: React.FC = () => {
           'public.mpeg-4',
           'com.apple.quicktime-movie',
           'org.matroska.mkv',
+          'io.matroska.mkv',
           'public.mpeg',
           'public.avi',
           'org.webmproject.webm',
@@ -170,6 +172,9 @@ const AddVideoScreen: React.FC = () => {
           'public.mpeg-2-video',
           'public.mpeg-2-transport-stream',
           'com.microsoft.windows-media-wmv',
+
+          'public.data',
+          'public.content',
         ],
         default: [
           'video/mp4',
@@ -193,11 +198,35 @@ const AddVideoScreen: React.FC = () => {
       const [result] = await pick({
         type: videoTypes,
         allowMultiSelection: false,
+        mode: 'open',
       });
 
-      const fileType = result.type || 'video/mp4';
-      const fileSize = result.size || 0;
-      const fileName = result.name || 'video';
+      let fileName = result.name || '';
+      if (!fileName && result.uri) {
+        const decodedUri = decodeURIComponent(result.uri);
+        fileName = decodedUri.split('/').pop() || 'video';
+      }
+
+      let fileType = result.type || '';
+      if (!fileType || !fileType.startsWith('video/')) {
+        const inferred = helpers.getMimeTypeFromExtension(fileName);
+        if (inferred) {
+          fileType = inferred;
+        } else if (!fileType) {
+          fileType = 'video/mp4';
+        }
+      }
+
+      let fileSize = result.size || 0;
+      if (!fileSize && result.uri) {
+        try {
+          const filePath = result.uri.replace('file://', '');
+          const stat = await RNFS.stat(filePath);
+          fileSize = stat.size;
+        } catch (statErr) {
+          console.warn('Could not stat file for size:', statErr);
+        }
+      }
 
       const validationResult = validation.isValidVideo({
         type: fileType,
