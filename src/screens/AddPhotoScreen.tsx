@@ -5,11 +5,11 @@ import {
   StyleSheet,
   Image,
   Alert,
-  SafeAreaView,
   Platform,
   Linking,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   launchCamera,
