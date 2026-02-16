@@ -7,13 +7,13 @@ import {
   Platform,
   PermissionsAndroid,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   launchImageLibrary,
-  ImagePickerResponse,
   Asset,
 } from 'react-native-image-picker';
 import {pick, types, isErrorWithCode, errorCodes} from '@react-native-documents/picker';
@@ -39,6 +39,7 @@ const AddVideoScreen: React.FC = () => {
   const [thumbnailUri, setThumbnailUri] = useState<string | null>(null);
   const [title, setTitle] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
 
   const generateThumbnail = useCallback(async (videoUri: string): Promise<void> => {
     try {
@@ -49,51 +50,6 @@ const AddVideoScreen: React.FC = () => {
       setThumbnailUri(null);
     }
   }, []);
-
-  const handleResponse = useCallback((response: ImagePickerResponse): void => {
-    if (response.didCancel) {
-      return;
-    }
-
-    if (response.errorCode) {
-      const errorMessages: Record<string, string> = {
-        camera_unavailable:
-          'Camera is not available on this device. Please use a physical device.',
-        permission:
-          'Media library permission was denied. Please enable it in your device settings.',
-        others: response.errorMessage || 'Failed to select video',
-      };
-      Alert.alert(
-        'Error',
-        errorMessages[response.errorCode] ||
-          response.errorMessage ||
-          'Failed to select video',
-      );
-      return;
-    }
-
-    if (response.assets && response.assets[0]) {
-      const video = response.assets[0];
-
-      const validationResult = validation.isValidVideo({
-        type: video.type || '',
-        size: video.fileSize || 0,
-        name: video.fileName,
-      });
-
-      if (!validationResult.valid) {
-        Alert.alert('Invalid Video', validationResult.error || '');
-        return;
-      }
-
-      setSelectedVideo(video);
-      setError('');
-
-      if (video.uri) {
-        generateThumbnail(video.uri);
-      }
-    }
-  }, [generateThumbnail]);
 
   const requestStoragePermission = useCallback(async (): Promise<boolean> => {
     if (Platform.OS !== 'android') {
@@ -146,15 +102,88 @@ const AddVideoScreen: React.FC = () => {
       return;
     }
 
-    launchImageLibrary(
-      {
-        mediaType: 'video',
-        quality: 0.8,
-        presentationStyle: 'fullScreen',
-      },
-      handleResponse,
-    );
-  }, [requestStoragePermission, handleResponse]);
+    const response = await launchImageLibrary({
+      mediaType: 'video',
+      presentationStyle: 'fullScreen',
+      assetRepresentationMode: 'current',
+    });
+
+    if (response.didCancel) {
+      return;
+    }
+
+    if (response.errorCode) {
+      const errorMessages: Record<string, string> = {
+        camera_unavailable:
+          'Camera is not available on this device. Please use a physical device.',
+        permission:
+          'Media library permission was denied. Please enable it in your device settings.',
+        others: response.errorMessage || 'Failed to select video',
+      };
+      Alert.alert(
+        'Error',
+        errorMessages[response.errorCode] ||
+          response.errorMessage ||
+          'Failed to select video',
+      );
+      return;
+    }
+
+    if (response.assets && response.assets[0]) {
+      const video = response.assets[0];
+
+      setLoading(true);
+      try {
+        let fileSize = video.fileSize || 0;
+        if (!fileSize && video.uri) {
+          try {
+            const filePath = video.uri.replace('file://', '');
+            const stat = await RNFS.stat(filePath);
+            fileSize = stat.size;
+          } catch (statErr) {
+            console.warn('Could not stat gallery video for size:', statErr);
+          }
+        }
+
+        let fileType = video.type || '';
+        if (!fileType || !fileType.startsWith('video/')) {
+          const fileName = video.fileName || '';
+          const inferred = helpers.getMimeTypeFromExtension(fileName);
+          if (inferred) {
+            fileType = inferred;
+          } else if (!fileType) {
+            fileType = 'video/mp4';
+          }
+        }
+
+        const validationResult = validation.isValidVideo({
+          type: fileType,
+          size: fileSize,
+          name: video.fileName,
+        });
+
+        if (!validationResult.valid) {
+          Alert.alert('Invalid Video', validationResult.error || '');
+          return;
+        }
+
+        const asset: Asset = {
+          ...video,
+          type: fileType,
+          fileSize: fileSize,
+        };
+
+        setSelectedVideo(asset);
+        setError('');
+
+        if (video.uri) {
+          await generateThumbnail(video.uri);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [requestStoragePermission, generateThumbnail]);
 
   const handleSelectFromFiles = useCallback(async (): Promise<void> => {
     try {
@@ -201,56 +230,61 @@ const AddVideoScreen: React.FC = () => {
         mode: 'open',
       });
 
-      let fileName = result.name || '';
-      if (!fileName && result.uri) {
-        const decodedUri = decodeURIComponent(result.uri);
-        fileName = decodedUri.split('/').pop() || 'video';
-      }
-
-      let fileType = result.type || '';
-      if (!fileType || !fileType.startsWith('video/')) {
-        const inferred = helpers.getMimeTypeFromExtension(fileName);
-        if (inferred) {
-          fileType = inferred;
-        } else if (!fileType) {
-          fileType = 'video/mp4';
+      setLoading(true);
+      try {
+        let fileName = result.name || '';
+        if (!fileName && result.uri) {
+          const decodedUri = decodeURIComponent(result.uri);
+          fileName = decodedUri.split('/').pop() || 'video';
         }
-      }
 
-      let fileSize = result.size || 0;
-      if (!fileSize && result.uri) {
-        try {
-          const filePath = result.uri.replace('file://', '');
-          const stat = await RNFS.stat(filePath);
-          fileSize = stat.size;
-        } catch (statErr) {
-          console.warn('Could not stat file for size:', statErr);
+        let fileType = result.type || '';
+        if (!fileType || !fileType.startsWith('video/')) {
+          const inferred = helpers.getMimeTypeFromExtension(fileName);
+          if (inferred) {
+            fileType = inferred;
+          } else if (!fileType) {
+            fileType = 'video/mp4';
+          }
         }
-      }
 
-      const validationResult = validation.isValidVideo({
-        type: fileType,
-        size: fileSize,
-        name: fileName,
-      });
+        let fileSize = result.size || 0;
+        if (!fileSize && result.uri) {
+          try {
+            const filePath = result.uri.replace('file://', '');
+            const stat = await RNFS.stat(filePath);
+            fileSize = stat.size;
+          } catch (statErr) {
+            console.warn('Could not stat file for size:', statErr);
+          }
+        }
 
-      if (!validationResult.valid) {
-        Alert.alert('Invalid Video', validationResult.error || '');
-        return;
-      }
+        const validationResult = validation.isValidVideo({
+          type: fileType,
+          size: fileSize,
+          name: fileName,
+        });
 
-      const asset: Asset = {
-        uri: result.uri,
-        type: fileType,
-        fileName: fileName,
-        fileSize: fileSize,
-      };
+        if (!validationResult.valid) {
+          Alert.alert('Invalid Video', validationResult.error || '');
+          return;
+        }
 
-      setSelectedVideo(asset);
-      setError('');
+        const asset: Asset = {
+          uri: result.uri,
+          type: fileType,
+          fileName: fileName,
+          fileSize: fileSize,
+        };
 
-      if (result.uri) {
-        generateThumbnail(result.uri);
+        setSelectedVideo(asset);
+        setError('');
+
+        if (result.uri) {
+          await generateThumbnail(result.uri);
+        }
+      } finally {
+        setLoading(false);
       }
     } catch (err) {
       if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED) {
@@ -297,6 +331,7 @@ const AddVideoScreen: React.FC = () => {
           onPress={handleSelectFromGallery}
           variant="primary"
           style={styles.selectButton}
+          disabled={loading}
         />
 
         <Button
@@ -304,6 +339,7 @@ const AddVideoScreen: React.FC = () => {
           onPress={handleSelectFromFiles}
           variant="secondary"
           style={styles.selectButton}
+          disabled={loading}
         />
 
         <Text style={styles.hintText}>
@@ -378,6 +414,15 @@ const AddVideoScreen: React.FC = () => {
           </Text>
         </Card>
       </KeyboardAvoidingWrapper>
+
+      {loading ? (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Processing video...</Text>
+          </View>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 };
@@ -490,6 +535,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textSecondary,
     marginBottom: 6,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  loadingBox: {
+    backgroundColor: COLORS.white || '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 36,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  loadingText: {
+    marginTop: 14,
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
   },
 });
 
