@@ -9,16 +9,37 @@ import {
   PERSIST,
   PURGE,
   REGISTER,
+  createTransform,
 } from 'redux-persist';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import authReducer from './slices/authSlice';
 import mediaReducer from './slices/mediaSlice';
 import uploadReducer from './slices/uploadSlice';
 
+const mediaTransform = createTransform(
+  (inboundState: any) => {
+    return inboundState;
+  },
+  (outboundState: any) => {
+    if (!outboundState) {
+      return {
+        deletedIds: [],
+        uploadedItems: [],
+      };
+    }
+    return {
+      deletedIds: Array.isArray(outboundState.deletedIds) ? outboundState.deletedIds : [],
+      uploadedItems: Array.isArray(outboundState.uploadedItems) ? outboundState.uploadedItems : [],
+    };
+  },
+  {whitelist: ['deletedIds', 'uploadedItems']},
+);
+
 const mediaPersistConfig = {
   key: 'media',
   storage: AsyncStorage,
   whitelist: ['deletedIds', 'uploadedItems'],
+  transforms: [mediaTransform],
 };
 
 const rootReducer = combineReducers({

@@ -101,7 +101,7 @@ const AddVideoScreen: React.FC = () => {
     if (!hasPermission) {
       return;
     }
-
+    setLoading(true);
     const response = await launchImageLibrary({
       mediaType: 'video',
       presentationStyle: 'fullScreen',
@@ -131,8 +131,6 @@ const AddVideoScreen: React.FC = () => {
 
     if (response.assets && response.assets[0]) {
       const video = response.assets[0];
-
-      setLoading(true);
       try {
         let fileSize = video.fileSize || 0;
         if (!fileSize && video.uri) {
@@ -306,16 +304,20 @@ const AddVideoScreen: React.FC = () => {
       return;
     }
 
-    navigation.navigate('Upload', {
-      mediaData: {
-        uri: selectedVideo.uri || '',
-        type: selectedVideo.type || 'video/mp4',
-        name: selectedVideo.fileName || 'video.mp4',
-        size: selectedVideo.fileSize || 0,
-        title: title.trim(),
-        thumbnail: thumbnailUri || undefined,
-      },
-    });
+    setLoading(true);
+    setTimeout(() => {
+      navigation.navigate('Upload', {
+        mediaData: {
+          uri: selectedVideo.uri || '',
+          type: selectedVideo.type || 'video/mp4',
+          name: selectedVideo.fileName || 'video.mp4',
+          size: selectedVideo.fileSize || 0,
+          title: title.trim(),
+          thumbnail: thumbnailUri || undefined,
+        },
+      });
+      setLoading(false);
+    }, 100);
   }, [selectedVideo, title, navigation, thumbnailUri]);
 
   return (

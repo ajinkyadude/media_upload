@@ -1,5 +1,6 @@
 import {createAsyncThunk} from '@reduxjs/toolkit';
 import {uploadService} from '../../services/uploadService';
+import {cacheService} from '../../services/cacheService';
 import {updateProgress, updateChunkProgress} from '../slices/uploadSlice';
 import {addMediaToList} from '../slices/mediaSlice';
 import {MediaData, UploadedMedia, MediaItem, ChunkUploadProgress} from '../../types';
@@ -74,6 +75,13 @@ export const uploadMedia = createAsyncThunk<
       bytesUploaded: totalBytes,
       totalBytes,
     }));
+
+    try {
+      await cacheService.cleanupMediaFiles(mediaData.uri, mediaData.thumbnail);
+      await cacheService.cleanupAllCacheFiles();
+    } catch (cleanupErr) {
+      console.warn('Cache cleanup failed after upload:', cleanupErr);
+    }
 
     return uploadedData;
   } catch (error: unknown) {

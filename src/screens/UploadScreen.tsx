@@ -11,6 +11,7 @@ import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import {COLORS} from '../constants/colors';
 import {helpers} from '../utils/helpers';
+import {cacheService} from '../services/cacheService';
 import {RootStackParamList} from '../types';
 
 type UploadNavProp = NativeStackNavigationProp<RootStackParamList, 'Upload'>;
@@ -35,6 +36,17 @@ const UploadScreen: React.FC = () => {
       dispatch(uploadMedia(mediaData));
     }
   }, [dispatch, mediaData]);
+
+  useEffect(() => {
+    if (success && mediaData) {
+      cacheService.cleanupMediaFiles(mediaData.uri, mediaData.thumbnail).catch(err => {
+        console.warn('Cache cleanup failed after upload:', err);
+      });
+      cacheService.cleanupAllCacheFiles().catch(err => {
+        console.warn('Full cache cleanup failed after upload:', err);
+      });
+    }
+  }, [success, mediaData]);
 
   useEffect(() => {
     isMountedRef.current = true;

@@ -26,6 +26,12 @@ const mediaSlice = createSlice({
       state.error = null;
     },
     addMediaToList: (state, action: PayloadAction<MediaItem>) => {
+      if (!Array.isArray(state.uploadedItems)) {
+        state.uploadedItems = [];
+      }
+      if (!Array.isArray(state.mediaList)) {
+        state.mediaList = [];
+      }
       state.uploadedItems.unshift(action.payload);
       state.mediaList.unshift(action.payload);
     },
@@ -43,6 +49,12 @@ const mediaSlice = createSlice({
       .addCase(fetchMediaList.fulfilled, (state, action) => {
         state.loading = false;
         state.refreshing = false;
+        if (!Array.isArray(state.deletedIds)) {
+          state.deletedIds = [];
+        }
+        if (!Array.isArray(state.uploadedItems)) {
+          state.uploadedItems = [];
+        }
         const deletedSet = new Set(state.deletedIds);
         const fetchedItems = action.payload.filter(
           item => !deletedSet.has(item.id),
@@ -62,6 +74,15 @@ const mediaSlice = createSlice({
       })
       .addCase(deleteMedia.fulfilled, (state, action) => {
         const deletedId = action.payload;
+        if (!Array.isArray(state.deletedIds)) {
+          state.deletedIds = [];
+        }
+        if (!Array.isArray(state.uploadedItems)) {
+          state.uploadedItems = [];
+        }
+        if (!Array.isArray(state.mediaList)) {
+          state.mediaList = [];
+        }
         if (!state.deletedIds.includes(deletedId)) {
           state.deletedIds.push(deletedId);
         }
